@@ -349,19 +349,122 @@ function switchPanelTab(tab) {
   if (tab === 'satellite') {
     querySTACScenes();
   }
+
+  if (tab === 'chat' || tab === 'analysis') {
+    updateMobileNavState(tab);
+  }
 }
 
 /**
- * Toggle side panel visibility
+ * Mobile-friendly side panel controls
  */
 function toggleSidePanel() {
   const panel = document.getElementById('sidePanel');
   if (panel.classList.contains('hidden')) {
-    panel.classList.remove('hidden');
+    openSidePanel();
   } else {
-    panel.classList.add('hidden');
+    closeSidePanel();
   }
-  map.invalidateSize();
+}
+
+function openSidePanel(tab = 'chat') {
+  const panel = document.getElementById('sidePanel');
+  panel.classList.remove('hidden');
+  switchPanelTab(tab);
+  updateMobileNavState(tab);
+  setTimeout(() => map && map.invalidateSize(), 150);
+}
+
+function closeSidePanel() {
+  const panel = document.getElementById('sidePanel');
+  panel.classList.add('hidden');
+  updateMobileNavState('map');
+  setTimeout(() => map && map.invalidateSize(), 150);
+}
+
+/**
+ * Hotspots Modal dialog for mobile & quick access
+ */
+function openHotspotsModal() {
+  const modal = document.getElementById('hotspotsModal');
+  if (modal) modal.classList.remove('hidden');
+  updateMobileNavState('hotspots');
+}
+
+function closeHotspotsModal() {
+  const modal = document.getElementById('hotspotsModal');
+  if (modal) modal.classList.add('hidden');
+  updateMobileNavState('map');
+}
+
+function selectHotspotAndClose(key) {
+  zoomToPreset(key);
+  closeHotspotsModal();
+  closeSidePanel();
+}
+
+/**
+ * Toggle layer controls panel collapsed / expanded
+ */
+function toggleLayerControlsPanel() {
+  const body = document.getElementById('layerControlsBody');
+  const chevron = document.getElementById('layerPanelChevron');
+  if (!body) return;
+  if (body.classList.contains('hidden')) {
+    body.classList.remove('hidden');
+    if (chevron) {
+      chevron.classList.remove('ph-caret-down');
+      chevron.classList.add('ph-caret-up');
+    }
+  } else {
+    body.classList.add('hidden');
+    if (chevron) {
+      chevron.classList.remove('ph-caret-up');
+      chevron.classList.add('ph-caret-down');
+    }
+  }
+}
+
+/**
+ * Mobile Bottom Navigation actions
+ */
+function mobileNavAction(action) {
+  if (action === 'map') {
+    closeSidePanel();
+    closeHotspotsModal();
+    updateMobileNavState('map');
+  } else if (action === 'layers') {
+    closeSidePanel();
+    closeHotspotsModal();
+    const body = document.getElementById('layerControlsBody');
+    if (body && body.classList.contains('hidden')) {
+      toggleLayerControlsPanel();
+    }
+    updateMobileNavState('layers');
+  } else if (action === 'chat') {
+    closeHotspotsModal();
+    openSidePanel('chat');
+  } else if (action === 'analysis') {
+    closeHotspotsModal();
+    openSidePanel('analysis');
+  } else if (action === 'hotspots') {
+    openHotspotsModal();
+  }
+}
+
+function updateMobileNavState(activeAction) {
+  const navItems = ['map', 'layers', 'chat', 'analysis', 'hotspots'];
+  navItems.forEach(item => {
+    const btn = document.getElementById(`navBtn${item.charAt(0).toUpperCase() + item.slice(1)}`);
+    if (!btn) return;
+    if (item === activeAction) {
+      btn.classList.add('text-emerald-400');
+      btn.classList.remove('text-slate-400');
+    } else {
+      btn.classList.remove('text-emerald-400');
+      btn.classList.add('text-slate-400');
+    }
+  });
 }
 
 /**
@@ -648,5 +751,25 @@ function escapeHtml(text) {
 }
 
 function setupEventListeners() {
-  // Key bindings or shortcut handlers if needed
+  window.addEventListener('resize', () => {
+    if (map) map.invalidateSize();
+  });
+
+  // On mobile screens (< 768px), initialize sidePanel as hidden to start with full map
+  if (window.innerWidth < 768) {
+    const panel = document.getElementById('sidePanel');
+    if (panel) panel.classList.add('hidden');
+    // Also auto-collapse layers panel on small mobile screens to keep map clean
+    const body = document.getElementById('layerControlsBody');
+    const chevron = document.getElementById('layerPanelChevron');
+    if (body) body.classList.add('hidden');
+    if (chevron) {
+      chevron.classList.remove('ph-caret-up');
+      chevron.classList.add('ph-caret-down');
+    }
+    updateMobileNavState('map');
+  } else {
+    const panel = document.getElementById('sidePanel');
+    if (panel) panel.classList.remove('hidden');
+  }
 }

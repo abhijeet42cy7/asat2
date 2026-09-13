@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>ASAT-2: Satellite GIS & Eucalyptus Detection AI</title>
   
   <!-- Tailwind CSS -->
@@ -51,6 +51,14 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
+    * {
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      overscroll-behavior: none;
+    }
     #map { height: 100%; width: 100%; z-index: 10; }
     .glassmorphism {
       background: rgba(15, 23, 42, 0.82);
@@ -80,22 +88,25 @@
         box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
       }
     }
+    .safe-bottom {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col overflow-hidden font-sans select-none">
+<body class="bg-slate-950 text-slate-100 h-screen h-[100dvh] w-screen flex flex-col overflow-hidden font-sans select-none">
 
   <!-- Header / Navigation Bar -->
-  <header class="h-14 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between px-4 z-30 shrink-0">
-    <div class="flex items-center space-x-3">
-      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-        <i class="ph-bold ph-satellite text-white text-xl"></i>
+  <header class="h-14 border-b border-slate-800 bg-slate-900/95 flex items-center justify-between px-3 sm:px-4 z-30 shrink-0">
+    <div class="flex items-center space-x-2 sm:space-x-3">
+      <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+        <i class="ph-bold ph-satellite text-white text-lg sm:text-xl"></i>
       </div>
-      <div>
+      <div class="min-w-0">
         <div class="flex items-center space-x-2">
-          <span class="font-bold tracking-wide text-lg text-emerald-400">ASAT-2</span>
-          <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">GIS Earth Observation</span>
+          <span class="font-bold tracking-wide text-base sm:text-lg text-emerald-400">ASAT-2</span>
+          <span class="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">GIS</span>
         </div>
-        <p class="text-[11px] text-slate-400">Automated Sentinel-2 & Landsat Vegetation / Eucalyptus Detector</p>
+        <p class="text-[10px] sm:text-[11px] text-slate-400 truncate hidden xs:block">Automated Sentinel-2 Eucalyptus Detector</p>
       </div>
     </div>
 
@@ -121,32 +132,44 @@
 
     <!-- Right Controls -->
     <div class="flex items-center space-x-3">
+      <button onclick="openHotspotsModal()" class="md:hidden flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 text-xs font-medium" title="Quick Hotspots">
+        <i class="ph-bold ph-globe-hemisphere-west text-sm"></i>
+        <span class="hidden xs:inline">Hotspots</span>
+      </button>
       <div class="flex items-center space-x-1 bg-slate-800/80 p-1 rounded-lg border border-slate-700 text-xs">
         <span id="stacStatusDot" class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot inline-block ml-1"></span>
-        <span class="text-slate-300 px-1 font-mono text-[11px]" id="stacEndpointLabel">STAC: Earth Search AWS</span>
+        <span class="text-slate-300 px-1 font-mono text-[11px] hidden sm:inline" id="stacEndpointLabel">STAC: Earth Search AWS</span>
+        <span class="text-slate-300 px-0.5 font-mono text-[10px] sm:hidden">STAC</span>
       </div>
-      <button onclick="toggleSidePanel()" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 border border-slate-700" title="Toggle Sidebar">
+      <button id="sidePanelToggleBtn" onclick="toggleSidePanel()" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 border border-slate-700" title="Toggle Sidebar">
         <i class="ph-bold ph-sidebar-simple text-lg"></i>
       </button>
     </div>
   </header>
 
   <!-- Main Content Layout -->
-  <div class="flex-1 flex overflow-hidden relative">
+  <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative w-full h-[calc(100dvh-3.5rem)]">
 
     <!-- Left Interactive Map -->
-    <div class="flex-1 relative flex flex-col h-full">
+    <div class="flex-1 relative flex flex-col h-full w-full">
       <div id="map"></div>
 
       <!-- Map Floating Overlay: Layer Controls & Spectral Toggles -->
-      <div class="absolute top-4 left-4 z-20 glassmorphism rounded-xl p-3 shadow-2xl max-w-xs text-xs space-y-3">
-        <div class="flex items-center justify-between border-b border-slate-700/60 pb-2">
+      <div id="layerPanel" class="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 glassmorphism rounded-xl p-3 shadow-2xl w-[280px] sm:w-[310px] max-w-[calc(100vw-1.5rem)] text-xs transition-all duration-200">
+        <div class="flex items-center justify-between border-b border-slate-700/60 pb-2 cursor-pointer select-none" onclick="toggleLayerControlsPanel()">
           <span class="font-semibold text-slate-200 flex items-center gap-1.5">
-            <i class="ph-bold ph-stack text-emerald-400 text-sm"></i> Spectral & Vegetation Layers
+            <i class="ph-bold ph-stack text-emerald-400 text-sm"></i>
+            <span>Layers & Filters</span>
           </span>
-          <span class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">Sentinel-2</span>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">Sentinel-2</span>
+            <button type="button" class="text-slate-400 hover:text-slate-200 p-0.5" title="Collapse/Expand">
+              <i id="layerPanelChevron" class="ph-bold ph-caret-up text-sm"></i>
+            </button>
+          </div>
         </div>
 
+        <div id="layerControlsBody" class="space-y-3 pt-2">
         <div class="space-y-2">
           <label class="flex items-center justify-between cursor-pointer p-1.5 hover:bg-slate-800/40 rounded">
             <span class="text-slate-300 flex items-center gap-1.5">
@@ -200,36 +223,52 @@
             <i class="ph-bold ph-polygon"></i> Draw Bounding
           </button>
         </div>
+        </div>
       </div>
 
       <!-- Bottom Map Stats HUD -->
-      <div class="absolute bottom-4 left-4 z-20 glassmorphism rounded-xl px-4 py-2 flex items-center space-x-6 text-xs shadow-xl pointer-events-auto">
-        <div>
-          <span class="text-slate-400 text-[10px] block uppercase tracking-wider">Target Biomass</span>
-          <span class="text-emerald-400 font-bold text-sm flex items-center gap-1">
-            <i class="ph-bold ph-tree"></i> Eucalyptus Globulus / Grandis
-          </span>
-        </div>
-        <div class="h-6 w-px bg-slate-800"></div>
-        <div>
-          <span class="text-slate-400 text-[10px] block uppercase tracking-wider">Detected Canopy</span>
-          <span id="detectedCanopy" class="text-slate-200 font-bold text-sm">-- ha</span>
-        </div>
-        <div class="h-6 w-px bg-slate-800"></div>
-        <div>
-          <span class="text-slate-400 text-[10px] block uppercase tracking-wider">Mean S2 NDVI</span>
-          <span id="meanNDVI" class="text-emerald-300 font-bold text-sm">--</span>
-        </div>
-        <div class="h-6 w-px bg-slate-800"></div>
-        <div>
-          <span class="text-slate-400 text-[10px] block uppercase tracking-wider">Coordinates (Center)</span>
-          <span id="centerCoords" class="text-slate-300 font-mono text-[11px]">40.640, -8.650</span>
+      <div id="mapStatsHud" class="absolute bottom-16 md:bottom-4 left-3 sm:left-4 z-20 glassmorphism rounded-xl p-2.5 sm:px-4 sm:py-2 text-xs shadow-xl pointer-events-auto max-w-[calc(100vw-1.5rem)]">
+        <div class="grid grid-cols-2 sm:flex sm:items-center gap-x-4 gap-y-1.5 sm:gap-0 sm:space-x-6">
+          <div class="col-span-2 sm:col-span-1">
+            <span class="text-slate-400 text-[10px] block uppercase tracking-wider">Target Biomass</span>
+            <span class="text-emerald-400 font-bold text-xs sm:text-sm flex items-center gap-1">
+              <i class="ph-bold ph-tree"></i> Eucalyptus Globulus
+            </span>
+          </div>
+          <div class="h-6 w-px bg-slate-800 hidden sm:block"></div>
+          <div>
+            <span class="text-slate-400 text-[10px] block uppercase tracking-wider">Detected Canopy</span>
+            <span id="detectedCanopy" class="text-slate-200 font-bold text-xs sm:text-sm">-- ha</span>
+          </div>
+          <div class="h-6 w-px bg-slate-800 hidden sm:block"></div>
+          <div>
+            <span class="text-slate-400 text-[10px] block uppercase tracking-wider">Mean S2 NDVI</span>
+            <span id="meanNDVI" class="text-emerald-300 font-bold text-xs sm:text-sm">--</span>
+          </div>
+          <div class="h-6 w-px bg-slate-800 hidden sm:block"></div>
+          <div class="col-span-2 sm:col-span-1">
+            <span class="text-slate-400 text-[10px] block uppercase tracking-wider">Coordinates (Center)</span>
+            <span id="centerCoords" class="text-slate-300 font-mono text-[10px] sm:text-[11px]">40.640, -8.650</span>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Right Sidebar: Automated AI GIS Chat & Spectral Analysis Assistant -->
-    <div id="sidePanel" class="w-[440px] border-l border-slate-800 bg-slate-900/95 flex flex-col h-full z-20 shrink-0 shadow-2xl transition-all duration-300">
+    <div id="sidePanel" class="hidden md:flex fixed inset-0 md:relative md:inset-auto z-40 md:z-20 w-full md:w-[400px] lg:w-[440px] md:border-l border-slate-800 bg-slate-950/98 md:bg-slate-900/95 flex-col h-full shrink-0 shadow-2xl transition-all duration-300">
+
+      <!-- Mobile Drawer Header -->
+      <div class="flex md:hidden items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900 shrink-0">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white">
+            <i class="ph-bold ph-satellite"></i>
+          </div>
+          <span class="font-bold text-sm text-emerald-400">ASAT-2 GIS Intelligence</span>
+        </div>
+        <button onclick="closeSidePanel()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium flex items-center gap-1.5">
+          <i class="ph-bold ph-x text-sm"></i> Back to Map
+        </button>
+      </div>
       
       <!-- Panel Tabs -->
       <div class="flex border-b border-slate-800 bg-slate-900 px-3 pt-2">
@@ -286,11 +325,11 @@
         </div>
 
         <!-- Chat Input Form -->
-        <div class="p-3 bg-slate-900 border-t border-slate-800">
+        <div class="p-3 bg-slate-900 border-t border-slate-800 safe-bottom">
           <form id="chatForm" onsubmit="handleChatSubmit(event)" class="flex items-center gap-2">
-            <input type="text" id="chatInput" placeholder="Ask AI to scan, locate, or analyze satellite GIS data..." 
-                   class="flex-1 bg-slate-950 text-slate-200 text-xs px-3 py-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-emerald-500 transition placeholder-slate-500">
-            <button type="submit" class="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition shadow-lg shadow-emerald-700/30 flex items-center justify-center">
+            <input type="text" id="chatInput" placeholder="Ask AI to scan, locate, or analyze satellite GIS data..."
+                   class="flex-1 bg-slate-950 text-slate-200 text-base sm:text-xs px-3 py-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-emerald-500 transition placeholder-slate-500">
+            <button type="submit" class="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition shadow-lg shadow-emerald-700/30 flex items-center justify-center shrink-0">
               <i class="ph-bold ph-paper-plane-right text-base"></i>
             </button>
           </form>
@@ -384,6 +423,82 @@
 
     </div>
 
+  </div>
+
+  <!-- Mobile Bottom Navigation Bar -->
+  <nav class="md:hidden fixed bottom-0 inset-x-0 h-14 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-around z-30 px-1 safe-bottom">
+    <button id="navBtnMap" onclick="mobileNavAction('map')" class="flex-1 flex flex-col items-center justify-center py-1 text-emerald-400">
+      <i class="ph-bold ph-map-trifold text-xl"></i>
+      <span class="text-[10px] font-medium">Map</span>
+    </button>
+    <button id="navBtnLayers" onclick="mobileNavAction('layers')" class="flex-1 flex flex-col items-center justify-center py-1 text-slate-400 hover:text-slate-200">
+      <i class="ph-bold ph-stack text-xl"></i>
+      <span class="text-[10px] font-medium">Layers</span>
+    </button>
+    <button id="navBtnChat" onclick="mobileNavAction('chat')" class="flex-1 flex flex-col items-center justify-center py-1 text-slate-400 hover:text-slate-200">
+      <i class="ph-bold ph-chat-teardrop-text text-xl"></i>
+      <span class="text-[10px] font-medium">AI Chat</span>
+    </button>
+    <button id="navBtnAnalysis" onclick="mobileNavAction('analysis')" class="flex-1 flex flex-col items-center justify-center py-1 text-slate-400 hover:text-slate-200">
+      <i class="ph-bold ph-chart-line-up text-xl"></i>
+      <span class="text-[10px] font-medium">Spectra</span>
+    </button>
+    <button id="navBtnHotspots" onclick="mobileNavAction('hotspots')" class="flex-1 flex flex-col items-center justify-center py-1 text-slate-400 hover:text-slate-200">
+      <i class="ph-bold ph-globe-hemisphere-west text-xl"></i>
+      <span class="text-[10px] font-medium">Hotspots</span>
+    </button>
+  </nav>
+
+  <!-- Hotspots Modal Sheet for Mobile/Desktop -->
+  <div id="hotspotsModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-4 space-y-3 max-h-[85vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <i class="ph-bold ph-globe-hemisphere-west text-emerald-400 text-lg"></i>
+          <h3 class="font-bold text-sm text-slate-100">Global Eucalyptus Hotspots</h3>
+        </div>
+        <button onclick="closeHotspotsModal()" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200">
+          <i class="ph-bold ph-x text-base"></i>
+        </button>
+      </div>
+      <div class="space-y-2 text-xs">
+        <button onclick="selectHotspotAndClose('portugal')" class="w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/70 transition flex items-center justify-between">
+          <div>
+            <div class="font-semibold text-emerald-300 flex items-center gap-1.5">🌲 Portugal (Viseu / Centro)</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">Commercial pulp production belt; dense maritime pine mix.</div>
+          </div>
+          <i class="ph-bold ph-caret-right text-slate-400 text-base shrink-0"></i>
+        </button>
+        <button onclick="selectHotspotAndClose('brazil')" class="w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/70 transition flex items-center justify-between">
+          <div>
+            <div class="font-semibold text-emerald-300 flex items-center gap-1.5">🌳 Brazil (Minas Gerais)</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">Clonal Eucalyptus grandis x urophylla forests.</div>
+          </div>
+          <i class="ph-bold ph-caret-right text-slate-400 text-base shrink-0"></i>
+        </button>
+        <button onclick="selectHotspotAndClose('australia')" class="w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/70 transition flex items-center justify-between">
+          <div>
+            <div class="font-semibold text-emerald-300 flex items-center gap-1.5">🐨 Blue Mtns (Australia)</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">Native Eucalyptus forest emitting characteristic blue haze.</div>
+          </div>
+          <i class="ph-bold ph-caret-right text-slate-400 text-base shrink-0"></i>
+        </button>
+        <button onclick="selectHotspotAndClose('california')" class="w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/70 transition flex items-center justify-between">
+          <div>
+            <div class="font-semibold text-emerald-300 flex items-center gap-1.5">🌿 California (Berkeley Hills)</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">Historic Blue Gum groves in wildland-urban interface.</div>
+          </div>
+          <i class="ph-bold ph-caret-right text-slate-400 text-base shrink-0"></i>
+        </button>
+        <button onclick="selectHotspotAndClose('india')" class="w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/70 transition flex items-center justify-between">
+          <div>
+            <div class="font-semibold text-emerald-300 flex items-center gap-1.5">🍃 India (Nilgiris / Ooty)</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">High-altitude Eucalyptus globulus introduced in 1843.</div>
+          </div>
+          <i class="ph-bold ph-caret-right text-slate-400 text-base shrink-0"></i>
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Application Logic -->
