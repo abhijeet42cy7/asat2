@@ -93,7 +93,7 @@
     }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 h-screen h-[100dvh] w-screen flex flex-col overflow-hidden font-sans select-none">
+<body class="bg-slate-950 text-slate-100 h-screen h-[100dvh] w-screen flex flex-col overflow-hidden font-sans">
 
   <!-- Header / Navigation Bar -->
   <header class="h-14 border-b border-slate-800 bg-slate-900/95 flex items-center justify-between px-3 sm:px-4 z-30 shrink-0">
@@ -254,7 +254,6 @@
           </div>
         </div>
       </div>
-    </div>
 
     <!-- Live Detection Floating Status Banner -->
     <div id="liveDetectionBanner" onclick="openChatPopup('chat')" class="hidden fixed top-16 left-1/2 -translate-x-1/2 z-30 glassmorphism rounded-full px-4 py-1.5 border border-emerald-500/50 shadow-2xl flex items-center gap-2.5 text-xs text-slate-200 transition-all duration-300 cursor-pointer hover:bg-slate-900 max-w-[92vw] truncate">
@@ -265,6 +264,23 @@
       </span>
     </div>
 
+    <!-- Floating Map Prompt Dock: Always visible when minimized to let user write directly -->
+    <div id="dockPromptBar" class="hidden fixed bottom-16 md:bottom-5 left-1/2 -translate-x-1/2 z-30 w-[92vw] sm:w-[480px] max-w-[540px] glassmorphism rounded-2xl p-1.5 border border-emerald-500/40 shadow-2xl flex items-center gap-2">
+      <form onsubmit="handleDockSubmit(event)" class="flex-1 flex items-center gap-2">
+        <div class="relative flex-1 flex items-center">
+          <i class="ph-bold ph-chat-teardrop-text text-emerald-400 text-base ml-2 mr-1.5 shrink-0"></i>
+          <input type="text" id="dockChatInput" placeholder="Ask AI (e.g. 'i want you scan this area')..."
+                 class="w-full bg-slate-950/90 text-slate-100 text-xs px-2.5 py-2 rounded-xl border border-slate-700/80 focus:outline-none focus:border-emerald-500 transition placeholder-slate-400 select-text cursor-text">
+        </div>
+        <button type="submit" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-lg shadow-emerald-700/30 shrink-0">
+          <span>Send</span>
+          <i class="ph-bold ph-paper-plane-right text-xs"></i>
+        </button>
+      </form>
+      <button onclick="openChatPopup('chat')" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition shrink-0 border border-slate-700" title="Expand Full Chat Window">
+        <i class="ph-bold ph-chat-circle-dots text-base"></i>
+      </button>
+    </div>
     <!-- Floating Chat Launcher Button (visible when popup is closed/minimized) -->
     <button id="floatingChatBtn" onclick="openChatPopup('chat')" class="fixed bottom-16 md:bottom-5 right-3 sm:right-5 z-30 flex items-center gap-2 px-3.5 py-2.5 rounded-full bg-slate-900/95 hover:bg-slate-800 text-emerald-400 font-medium shadow-2xl border border-emerald-500/50 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md">
       <div class="relative flex items-center justify-center">
@@ -337,6 +353,9 @@
 
         <!-- Pre-suggested quick queries -->
         <div class="px-3 py-1.5 bg-slate-950/70 border-t border-slate-800/60 flex gap-1.5 overflow-x-auto text-[10px] custom-scrollbar whitespace-nowrap shrink-0">
+          <button onclick="sendQuickPrompt('i want you scan this area')" class="px-2.5 py-0.5 rounded-full bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/50 flex items-center gap-1 font-semibold">
+            🎯 Scan this area
+          </button>
           <button onclick="sendQuickPrompt('find eucalyptus in bangalore india')" class="px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-emerald-300 border border-slate-700/80 flex items-center gap-1">
             🌱 Bangalore
           </button>
@@ -357,8 +376,8 @@
         <!-- Chat Input Form -->
         <div class="p-2.5 bg-slate-900/95 border-t border-slate-800 shrink-0 safe-bottom">
           <form id="chatForm" onsubmit="handleChatSubmit(event)" class="flex items-center gap-2">
-            <input type="text" id="chatInput" placeholder="Ask AI (e.g. find eucalyptus in Bangalore)..."
-                   class="flex-1 bg-slate-950 text-slate-200 text-xs px-3 py-2 rounded-xl border border-slate-700/80 focus:outline-none focus:border-emerald-500 transition placeholder-slate-500">
+            <input type="text" id="chatInput" placeholder="Ask AI (e.g. 'i want you scan this area' or 'find eucalyptus in Bangalore')..."
+                   class="flex-1 bg-slate-950 text-slate-100 text-xs px-3 py-2 rounded-xl border border-slate-700/80 focus:outline-none focus:border-emerald-500 transition placeholder-slate-400 select-text cursor-text">
             <button type="submit" class="p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition shadow-md shadow-emerald-700/30 flex items-center justify-center shrink-0" title="Send & Auto-Minimize">
               <i class="ph-bold ph-paper-plane-right text-sm"></i>
             </button>

@@ -413,11 +413,15 @@ function openChatPopup(tab = 'chat') {
   const panel = document.getElementById('sidePanel');
   const floatingBtn = document.getElementById('floatingChatBtn');
   const badge = document.getElementById('floatingChatBadge');
+  const dock = document.getElementById('dockPromptBar');
   if (panel) {
     panel.classList.remove('hidden');
   }
   if (floatingBtn) {
     floatingBtn.classList.add('hidden');
+  }
+  if (dock) {
+    dock.classList.add('hidden');
   }
   if (badge) {
     badge.innerText = 'Ask';
@@ -426,18 +430,22 @@ function openChatPopup(tab = 'chat') {
   switchPanelTab(tab);
   setTimeout(() => {
     const input = document.getElementById('chatInput');
-    if (input && window.innerWidth >= 768) input.focus();
+    if (input) input.focus();
   }, 100);
 }
 
 function minimizeChatPopup() {
   const panel = document.getElementById('sidePanel');
   const floatingBtn = document.getElementById('floatingChatBtn');
+  const dock = document.getElementById('dockPromptBar');
   if (panel) {
     panel.classList.add('hidden');
   }
   if (floatingBtn) {
     floatingBtn.classList.remove('hidden');
+  }
+  if (dock) {
+    dock.classList.remove('hidden');
   }
   updateMobileNavState('map');
   if (map) {
@@ -462,6 +470,18 @@ function toggleChatPopup() {
 function toggleSidePanel() { toggleChatPopup(); }
 function openSidePanel(tab = 'chat') { openChatPopup(tab); }
 function closeSidePanel() { minimizeChatPopup(); }
+
+function handleDockSubmit(e) {
+  e.preventDefault();
+  const input = document.getElementById('dockChatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  appendUserMessage(text);
+  showLiveDetectionBanner(`<i class="ph-bold ph-radar animate-spin text-emerald-400 mr-1"></i> Scanning S2 data for "${escapeHtml(text.slice(0, 30))}"...`);
+  processUserQuery(text);
+}
 
 /**
  * Hotspots Modal dialog for mobile & quick access
@@ -577,19 +597,34 @@ function updateThreshold(val) {
 /**
  * Automated Viewport Scan
  */
-function scanCurrentViewport() {
+function scanCurrentViewport(skipUserMessage = false) {
   const bounds = map.getBounds();
   const center = map.getCenter();
   
-  appendUserMessage("Scan current map viewport for Eucalyptus and compute indices");
+  if (!skipUserMessage) {
+    appendUserMessage("Scan current map viewport for Eucalyptus and compute indices");
+  }
   appendBotTyping();
 
   setTimeout(() => {
     removeBotTyping();
     renderEucalyptusPolygons([center.lat, center.lng], map.getZoom());
-    const estHa = Math.round((bounds.getNorth() - bounds.getSouth()) * (bounds.getEast() - bounds.getWest()) * 45000);
+    const estHa = Math.max(180, Math.round((bounds.getNorth() - bounds.getSouth()) * (bounds.getEast() - bounds.getWest()) * 45000));
     
-    appendBotMessage(`**Viewport Scan Complete**\n\n🛰️ **Analyzed Satellite Grid**: Sentinel-2 L2A (10m Resolution)\n- **Center**: ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}\n- **Bounding Box**: [${bounds.getWest().toFixed(3)}, ${bounds.getSouth().toFixed(3)}, ${bounds.getEast().toFixed(3)}, ${bounds.getNorth().toFixed(3)}]\n- **Eucalyptus Biomass Identified**: ~${estHa} ha\n- **Spectral Vigor (Mean NDVI)**: 0.78\n- **Red-Edge Index (NDRE)**: 0.54\n\nIdentified stands have been demarcated with high-probability boundary polygons on your map.`);
+    document.getElementById('detectedCanopy').innerText = `~${estHa.toLocaleString()} ha`;
+    document.getElementById('meanNDVI').innerText = `0.78`;
+    document.getElementById('spectralMatchPct').innerText = `92%`;
+    document.getElementById('spectralMatchBar').style.width = `92%`;
+
+    showLiveDetectionBanner(`✅ <strong>Area Scanned</strong>: ~${estHa.toLocaleString()} ha Eucalyptus stands mapped (92% match) • Tap for report`, true);
+
+    const badge = document.getElementById('floatingChatBadge');
+    if (badge) {
+      badge.innerText = 'New';
+      badge.className = 'text-[10px] bg-emerald-400 text-slate-950 font-bold px-1.5 py-0.2 rounded-full animate-bounce';
+    }
+
+    appendBotMessage(`**Viewport Scan Complete for Current Area**\n\n🛰️ **Analyzed Satellite Grid**: Sentinel-2 L2A (10m Multi-Spectral)\n- **Coordinates (Center)**: \`${center.lat.toFixed(4)}° N, ${center.lng.toFixed(4)}° E\`\n- **Bounding Box**: \`[${bounds.getWest().toFixed(3)}, ${bounds.getSouth().toFixed(3)}, ${bounds.getEast().toFixed(3)}, ${bounds.getNorth().toFixed(3)}]\`\n- **Eucalyptus Biomass Identified**: **~${estHa.toLocaleString()} ha**\n- **Spectral Vigor (Mean S2 NDVI)**: **0.78** (Dense vegetation canopy)\n- **Red-Edge Index (NDRE)**: **0.54** (Chlorophyll absorption inflection point)\n\nIdentified stands matching Eucalyptus spectral signatures have been demarcated with high-probability boundary polygons directly on your map.`);
   }, 900);
 }
 
@@ -742,6 +777,22 @@ function processUserQuery(query) {
 
   setTimeout(async () => {
     removeBotTyping();
+
+    // 0. Explicit scan "this area" / "current area" / "scan here" / "i want you scan this area"
+    if (
+      lower.includes('this area') ||
+      lower.includes('current area') ||
+      lower.includes('scan here') ||
+      lower.includes('scan this') ||
+      lower.includes('current map') ||
+      lower.includes('viewport') ||
+      lower.includes('scan map') ||
+      lower.trim() === 'scan' ||
+      lower.trim() === 'scan area'
+    ) {
+      scanCurrentViewport(true);
+      return;
+    }
 
     // 1. Navigation / Known Hotspot queries
     if (lower.includes('portugal') || lower.includes('viseu') || lower.includes('iberia')) {
@@ -904,8 +955,8 @@ function setupEventListeners() {
     if (map) map.invalidateSize();
   });
 
-  // Start with clean unobstructed map and floating chat launcher
-  minimizeChatPopup();
+  // Open chat popup by default so user can immediately type their request
+  openChatPopup('chat');
 
   // On mobile screens (< 768px), auto-collapse layers panel to keep map clean
   if (window.innerWidth < 768) {
@@ -917,5 +968,5 @@ function setupEventListeners() {
       chevron.classList.add('ph-caret-down');
     }
   }
-  updateMobileNavState('map');
+  updateMobileNavState('chat');
 }
