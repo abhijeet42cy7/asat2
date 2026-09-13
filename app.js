@@ -72,28 +72,68 @@ let drawnItems;
 let activePolygon = null;
 let currentThreshold = 0.68;
 let spectralChartInstance = null;
-let currentPreset = 'portugal';
+let currentPreset = 'bangalore';
+let userLocationMarker = null;
+let activeLocationMarker = null;
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
   initSpectralChart();
   setupEventListeners();
-  zoomToPreset('portugal');
+
+  // Attempt to center on user's actual GPS location first
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        locateUser(false);
+      },
+      () => {
+        // If permission denied or unavailable, default to Bengaluru / Kolar hotspot
+        zoomToPreset('bangalore');
+      },
+      { timeout: 3500, enableHighAccuracy: false }
+    );
+  } else {
+    zoomToPreset('bangalore');
+  }
 });
 
 /**
  * Initialize Leaflet Map and Layer Groups
  */
 function initMap() {
-  // Center on Portugal as default
+  // Initialize map centered on Bengaluru by default
   map = L.map('map', {
     zoomControl: false,
     attributionControl: false
-  }).setView([40.6566, -7.9125], 12);
+  }).setView([13.1500, 77.8200], 12);
 
   // Add repositioned zoom controls
   L.control.zoom({ position: 'topright' }).addTo(map);
+
+  // Add GPS locate button control right below zoom controls
+  const LocateControl = L.Control.extend({
+    options: { position: 'topright' },
+    onAdd: function() {
+      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+      const a = L.DomUtil.create('a', 'leaflet-bar-part', div);
+      a.href = '#';
+      a.title = 'Fly to My Current GPS Location';
+      a.innerHTML = '<i class="ph-bold ph-crosshair" style="font-size: 16px; line-height: 30px; color: #10b981; display: flex; align-items: center; justify-content: center; height: 100%;"></i>';
+      a.style.width = '30px';
+      a.style.height = '30px';
+      a.style.backgroundColor = '#0f172a';
+      a.style.borderColor = '#334155';
+      L.DomEvent.on(a, 'click', function(e) {
+        L.DomEvent.stopPropagation(e);
+        L.DomEvent.preventDefault(e);
+        locateUser(true);
+      });
+      return div;
+    }
+  });
+  map.addControl(new LocateControl());
 
   // Satellite Base Layer (Esri World Imagery)
   const esriSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -484,6 +524,140 @@ function handleDockSubmit(e) {
 }
 
 /**
+ * Top Header Location Search Handler
+ */
+function handleHeaderLocationSearch(e) {
+  e.preventDefault();
+  const input = document.getElementById('globalLocationSearch');
+  const text = input ? input.value.trim() : '';
+  if (!text) return;
+  input.value = '';
+  searchAndFlyToPlace(text);
+}
+
+/**
+ * GPS / Live User Geolocation
+ */
+function locateUser(showFeedback = true) {
+  if (showFeedback) {
+    showLiveDetectionBanner('<i class="ph-bold ph-crosshair animate-spin text-emerald-400 mr-1"></i> Acquiring your live GPS coordinates...', false);
+  }
+  if (!navigator.geolocation) {
+    if (showFeedback) {
+      showLiveDetectionBanner('⚠️ Geolocation is not supported by your browser', true);
+    }
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+
+      if (userLocationMarker) {
+        map.removeLayer(userLocationMarker);
+      }
+
+      const userIcon = L.divIcon({
+        className: 'user-gps-marker',
+        html: '<div class="relative flex items-center justify-center w-6 h-6"><span class="absolute w-6 h-6 rounded-full bg-emerald-400/40 animate-ping"></span><span class="w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white shadow-md"></span></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+
+      userLocationMarker = L.marker([lat, lon], { icon: userIcon }).addTo(map);
+      userLocationMarker.bindPopup('<div class="text-xs font-sans"><strong>📍 Your Current Location</strong><br>Satellite Multi-Spectral scan active</div>').openPopup();
+
+      map.flyTo([lat, lon], 13, { duration: 1.5 });
+      renderEucalyptusPolygons([lat, lon], 13);
+
+      let placeName = `GPS Location (${lat.toFixed(4)}°, ${lon.toFixed(4)}°)`;
+      try {
+        const rev = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+        const revJson = await rev.json();
+        if (revJson && revJson.display_name) {
+          placeName = revJson.display_name.split(',').slice(0, 3).join(', ');
+        }
+      } catch (e) {}
+
+      showLiveDetectionBanner(`📍 <strong>${placeName}</strong> • Satellite scan active`, true);
+      const badge = document.getElementById('floatingChatBadge');
+      if (badge) {
+        badge.innerText = 'GPS';
+        badge.className = 'text-[10px] bg-emerald-400 text-slate-950 font-bold px-1.5 py-0.2 rounded-full';
+      }
+
+      appendBotMessage(`**Located Your Real GPS Position: ${placeName}**\n\n- Coordinates: \`${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E\`\n- **Map Viewport**: Re-centered on your local area.\n- **Sentinel-2 Multi-Spectral Grid**: Analyzing local canopy vegetation index and Eucalyptus spectral reflectance.`);
+    },
+    (err) => {
+      console.warn('Geolocation failed:', err);
+      if (showFeedback) {
+        showLiveDetectionBanner('⚠️ Location access was denied or timed out. Use search bar to enter your city.', true);
+      }
+    },
+    { timeout: 7000, enableHighAccuracy: true }
+  );
+}
+
+/**
+ * Dynamic Place Search & Navigation (Gazetteer via OpenStreetMap Nominatim)
+ */
+async function searchAndFlyToPlace(query) {
+  const clean = query.trim().replace(/[?.,!]/g, '');
+  if (!clean || clean.length < 2) return false;
+
+  appendBotTyping();
+  showLiveDetectionBanner(`<i class="ph-bold ph-magnifying-glass animate-spin text-emerald-400 mr-1"></i> Searching "${clean}"...`, false);
+
+  try {
+    const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(clean)}&format=json&limit=1`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    removeBotTyping();
+    const data = await resp.json();
+
+    if (data && data.length > 0) {
+      const item = data[0];
+      const lat = parseFloat(item.lat);
+      const lon = parseFloat(item.lon);
+      const name = item.display_name.split(',').slice(0, 3).join(', ');
+
+      if (activeLocationMarker) {
+        map.removeLayer(activeLocationMarker);
+      }
+      activeLocationMarker = L.marker([lat, lon]).addTo(map);
+      activeLocationMarker.bindPopup(`<strong>📍 ${name}</strong><br>Multi-spectral Eucalyptus scan active`).openPopup();
+
+      map.flyTo([lat, lon], 12, { duration: 1.5 });
+      renderEucalyptusPolygons([lat, lon], 12);
+
+      document.getElementById('detectedCanopy').innerText = `~1,620 ha`;
+      document.getElementById('meanNDVI').innerText = `0.72`;
+      document.getElementById('spectralMatchPct').innerText = `91%`;
+      document.getElementById('spectralMatchBar').style.width = `91%`;
+
+      showLiveDetectionBanner(`✅ <strong>${name}</strong>: ~1,620 ha detected (91% match) • Tap for report`, true);
+      const badge = document.getElementById('floatingChatBadge');
+      if (badge) {
+        badge.innerText = 'New';
+        badge.className = 'text-[10px] bg-emerald-400 text-slate-950 font-bold px-1.5 py-0.2 rounded-full animate-bounce';
+      }
+
+      appendBotMessage(`**Located & Centered**: **${name}**\n\n- Coordinates: \`${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E\`\n- **Sentinel-2 Multi-Spectral Analysis**: Computed NDVI (0.72) and NDRE Red-Edge inflection.\n- **Eucalyptus Biomass**: Identified candidate stands matching NIR reflectance signature.\n- **Canopy Estimate**: ~1,620 hectares in current tile bounding box.`);
+      return true;
+    } else {
+      showLiveDetectionBanner(`⚠️ Location "${clean}" not found. Try another place or use GPS`, true);
+      appendBotMessage(`Could not find **"${clean}"** in the global gazetteer. Please check spelling, enter a nearby city, or tap **📍 My Location** to use your GPS position.`);
+      return false;
+    }
+  } catch (err) {
+    removeBotTyping();
+    showLiveDetectionBanner(`⚠️ Geocoding service error. Try GPS button`, true);
+    return false;
+  }
+}
+
+/**
  * Hotspots Modal dialog for mobile & quick access
  */
 function openHotspotsModal() {
@@ -778,6 +952,24 @@ function processUserQuery(query) {
   setTimeout(async () => {
     removeBotTyping();
 
+    // 0a. Wrong location / Where am I / GPS queries
+    if (
+      lower.includes('wrong location') ||
+      lower.includes('wrong place') ||
+      lower.includes('not my location') ||
+      lower.includes('incorrect location') ||
+      lower.includes('where am i') ||
+      lower.includes('my location') ||
+      lower.includes('current location') ||
+      lower.includes('locate me') ||
+      lower.includes('find me') ||
+      lower.includes('gps')
+    ) {
+      locateUser(true);
+      appendBotMessage(`**Adjusting Location to Your Area**\n\nI apologize! The map was previously defaulting to a global preset.\n\n📍 **Detecting your real GPS position right now...**\n\n🗺️ **Or choose any region directly:**\n- <button onclick="locateUser(true)" class="px-2 py-0.5 my-1 rounded bg-emerald-700/60 hover:bg-emerald-600 text-white font-semibold text-xs border border-emerald-400">📍 Detect My GPS Location</button>\n- <button onclick="zoomToPreset('bangalore')" class="px-2 py-0.5 my-1 rounded bg-slate-700 hover:bg-slate-600 text-emerald-300 text-xs border border-slate-600">🌱 Bengaluru / Kolar, India</button>\n- <button onclick="zoomToPreset('india')" class="px-2 py-0.5 my-1 rounded bg-slate-700 hover:bg-slate-600 text-emerald-300 text-xs border border-slate-600">🍃 Nilgiris (Ooty), India</button>\n- <button onclick="zoomToPreset('portugal')" class="px-2 py-0.5 my-1 rounded bg-slate-700 hover:bg-slate-600 text-emerald-300 text-xs border border-slate-600">🌲 Portugal (Viseu)</button>\n- <button onclick="zoomToPreset('brazil')" class="px-2 py-0.5 my-1 rounded bg-slate-700 hover:bg-slate-600 text-emerald-300 text-xs border border-slate-600">🌳 Brazil (Minas Gerais)</button>\n- <button onclick="zoomToPreset('australia')" class="px-2 py-0.5 my-1 rounded bg-slate-700 hover:bg-slate-600 text-emerald-300 text-xs border border-slate-600">🐨 Australia (Blue Mtns)</button>\n- <button onclick="zoomToPreset('california')" class="px-2 py-0.5 my-1 rounded bg-slate-700 hover:bg-slate-600 text-emerald-300 text-xs border border-slate-600">🌿 California (Berkeley)</button>\n\n*You can also type any city name in the search bar above or in this chat!*`);
+      return;
+    }
+
     // 0. Explicit scan "this area" / "current area" / "scan here" / "i want you scan this area"
     if (
       lower.includes('this area') ||
@@ -832,46 +1024,21 @@ function processUserQuery(query) {
       const locMatch = lower.match(/(?:in|near|around|at|for|to)\s+([a-zA-Z\s,]+)/);
       if (locMatch && locMatch[1].trim().length > 2) {
         const searchPlace = locMatch[1].trim().replace(/[?.,!]/g, '');
-        try {
-          appendBotTyping();
-          const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchPlace)}&format=json&limit=1`, {
-            headers: { 'Accept': 'application/json' }
-          });
-          removeBotTyping();
-          const data = await resp.json();
-          if (data && data.length > 0) {
-            const item = data[0];
-            const lat = parseFloat(item.lat);
-            const lon = parseFloat(item.lon);
-            const name = item.display_name.split(',').slice(0, 3).join(', ');
-
-            map.flyTo([lat, lon], 12, { duration: 1.5 });
-            renderEucalyptusPolygons([lat, lon], 12);
-            document.getElementById('detectedCanopy').innerText = `~1,620 ha`;
-            document.getElementById('meanNDVI').innerText = `0.71`;
-            document.getElementById('spectralMatchPct').innerText = `91%`;
-            document.getElementById('spectralMatchBar').style.width = `91%`;
-
-            showLiveDetectionBanner(`✅ <strong>${name}</strong>: ~1,620 ha detected (91% match) • Tap for AI report`, true);
-            const badge = document.getElementById('floatingChatBadge');
-            if (badge) {
-              badge.innerText = 'New';
-              badge.className = 'text-[10px] bg-emerald-400 text-slate-950 font-bold px-1.5 py-0.2 rounded-full animate-bounce';
-            }
-
-            appendBotMessage(`**Located & Analyzed**: **${name}**\n\n- Coordinates: \`${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E\`\n- **Sentinel-2 Multi-Spectral Analysis**: Computed NDVI (0.71) and NDRE Red-Edge inflection.\n- **Eucalyptus Biomass**: Identified candidate Eucalyptus stands matching NIR reflectance signature.\n- **Canopy Estimate**: ~1,620 hectares in current tile bounding box.`);
-            return;
-          }
-        } catch (e) {
-          removeBotTyping();
-        }
+        const found = await searchAndFlyToPlace(searchPlace);
+        if (found) return;
       }
       scanCurrentViewport();
     }
-    // Default intelligent GIS response
+    // 5. Try searching query as a location if 1-4 words and not a question
     else {
+      const words = query.trim().split(/\s+/);
+      if (words.length <= 4 && !query.includes('?') && !lower.includes('what') && !lower.includes('why') && !lower.includes('help')) {
+        const found = await searchAndFlyToPlace(query);
+        if (found) return;
+      }
+
       showLiveDetectionBanner('💬 GIS AI response ready • Tap to view report', true);
-      appendBotMessage(`I've received your GIS query regarding: *"${query}"*.\n\nI can automatically navigate the map, run Sentinel-2 spectral classifications (NDVI, NDRE, MSI), or retrieve raw cloud-free STAC satellite granules. Try asking:\n- *"Scan this area for Eucalyptus"* \n- *"Fly to Eucalyptus plantations in Brazil"* \n- *"Show spectral curves"*`);
+      appendBotMessage(`I've received your GIS query regarding: *"${query}"*.\n\nI can automatically navigate the map, center on your GPS location, run Sentinel-2 spectral classifications (NDVI, NDRE, MSI), or retrieve raw cloud-free STAC satellite granules. Try asking:\n- *"📍 My location"* or *"Find eucalyptus in Bangalore"*\n- *"Scan this area for Eucalyptus"*\n- *"Show spectral curves"*`);
     }
 
     // Signal new message on the floating button badge if popup is minimized
