@@ -154,6 +154,9 @@ function zoomToPreset(key) {
   // Render synthetic Eucalyptus polygon clusters for the selected area
   renderEucalyptusPolygons(target.coords, target.zoom);
 
+  // Show live detection HUD banner over map
+  showLiveDetectionBanner(`✅ <strong>${target.name}</strong>: ${target.canopyHa} ha detected (${target.confidence}) • Tap for AI report`, true);
+
   // Post bot message in chat
   appendBotMessage(`**Navigated to ${target.name}**\n\n${target.desc}\n- **Estimated Canopy**: ${target.canopyHa} ha\n- **Typical S2 NDVI**: ${target.typicalNDVI}\n- **Eucalyptus Spectral Index Confidence**: ${target.confidence}`);
 }
@@ -344,19 +347,29 @@ function initSpectralChart() {
 function switchPanelTab(tab) {
   const tabs = ['chat', 'analysis', 'satellite'];
   tabs.forEach(t => {
-    document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.add('hidden');
+    const tabEl = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`);
     const btn = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}Btn`);
-    btn.classList.remove('border-emerald-500', 'text-emerald-400');
-    btn.classList.add('border-transparent', 'text-slate-400');
+    if (tabEl) tabEl.classList.add('hidden');
+    if (btn) {
+      btn.classList.remove('text-emerald-400', 'bg-slate-800', 'border-emerald-500');
+      btn.classList.add('text-slate-400', 'bg-transparent', 'border-transparent');
+    }
   });
 
-  document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}`).classList.remove('hidden');
+  const activeTabEl = document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}`);
   const activeBtn = document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}Btn`);
-  activeBtn.classList.add('border-emerald-500', 'text-emerald-400');
-  activeBtn.classList.remove('border-transparent', 'text-slate-400');
+  if (activeTabEl) activeTabEl.classList.remove('hidden');
+  if (activeBtn) {
+    activeBtn.classList.add('text-emerald-400', 'bg-slate-800');
+    activeBtn.classList.remove('text-slate-400', 'bg-transparent');
+  }
 
   if (tab === 'satellite') {
     querySTACScenes();
+  }
+
+  if (tab === 'analysis' && spectralChartInstance) {
+    setTimeout(() => spectralChartInstance.resize(), 60);
   }
 
   if (tab === 'chat' || tab === 'analysis') {
@@ -365,31 +378,90 @@ function switchPanelTab(tab) {
 }
 
 /**
- * Mobile-friendly side panel controls
+ * Live Detection Banner notification floating over the map
  */
-function toggleSidePanel() {
-  const panel = document.getElementById('sidePanel');
-  if (panel.classList.contains('hidden')) {
-    openSidePanel();
-  } else {
-    closeSidePanel();
+let liveBannerTimeout = null;
+function showLiveDetectionBanner(text, isCompleted = false) {
+  const banner = document.getElementById('liveDetectionBanner');
+  const bannerText = document.getElementById('liveDetectionBannerText');
+  const pulse = document.getElementById('liveDetectionPulse');
+  if (!banner || !bannerText) return;
+
+  bannerText.innerHTML = text;
+  banner.classList.remove('hidden');
+
+  if (pulse) {
+    if (isCompleted) {
+      pulse.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0';
+    } else {
+      pulse.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 pulse-dot shrink-0';
+    }
+  }
+
+  if (liveBannerTimeout) clearTimeout(liveBannerTimeout);
+  if (isCompleted) {
+    liveBannerTimeout = setTimeout(() => {
+      if (banner) banner.classList.add('hidden');
+    }, 8500);
   }
 }
 
-function openSidePanel(tab = 'chat') {
+/**
+ * Small Popup Window Controls for AI GIS Chat
+ */
+function openChatPopup(tab = 'chat') {
   const panel = document.getElementById('sidePanel');
-  panel.classList.remove('hidden');
+  const floatingBtn = document.getElementById('floatingChatBtn');
+  const badge = document.getElementById('floatingChatBadge');
+  if (panel) {
+    panel.classList.remove('hidden');
+  }
+  if (floatingBtn) {
+    floatingBtn.classList.add('hidden');
+  }
+  if (badge) {
+    badge.innerText = 'Ask';
+    badge.className = 'text-[10px] bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-medium px-1.5 py-0.2 rounded-full';
+  }
   switchPanelTab(tab);
-  updateMobileNavState(tab);
-  setTimeout(() => map && map.invalidateSize(), 150);
+  setTimeout(() => {
+    const input = document.getElementById('chatInput');
+    if (input && window.innerWidth >= 768) input.focus();
+  }, 100);
 }
 
-function closeSidePanel() {
+function minimizeChatPopup() {
   const panel = document.getElementById('sidePanel');
-  panel.classList.add('hidden');
+  const floatingBtn = document.getElementById('floatingChatBtn');
+  if (panel) {
+    panel.classList.add('hidden');
+  }
+  if (floatingBtn) {
+    floatingBtn.classList.remove('hidden');
+  }
   updateMobileNavState('map');
-  setTimeout(() => map && map.invalidateSize(), 150);
+  if (map) {
+    map.invalidateSize();
+  }
 }
+
+function closeChatPopup() {
+  minimizeChatPopup();
+}
+
+function toggleChatPopup() {
+  const panel = document.getElementById('sidePanel');
+  if (panel && !panel.classList.contains('hidden')) {
+    minimizeChatPopup();
+  } else {
+    openChatPopup('chat');
+  }
+}
+
+// Backward-compatible aliases
+function toggleSidePanel() { toggleChatPopup(); }
+function openSidePanel(tab = 'chat') { openChatPopup(tab); }
+function closeSidePanel() { minimizeChatPopup(); }
 
 /**
  * Hotspots Modal dialog for mobile & quick access
@@ -646,11 +718,21 @@ function handleChatSubmit(e) {
 
   input.value = '';
   appendUserMessage(text);
+
+  // Auto-minimize chat popup on send so the user sees live map detection
+  minimizeChatPopup();
+  showLiveDetectionBanner(`<i class="ph-bold ph-radar animate-spin text-emerald-400 mr-1"></i> Scanning S2 data for "${escapeHtml(text.slice(0, 30))}"...`);
+
   processUserQuery(text);
 }
 
 function sendQuickPrompt(prompt) {
   appendUserMessage(prompt);
+
+  // Auto-minimize chat popup on send so the user sees live map detection
+  minimizeChatPopup();
+  showLiveDetectionBanner(`<i class="ph-bold ph-radar animate-spin text-emerald-400 mr-1"></i> Scanning S2 data for "${escapeHtml(prompt.slice(0, 30))}"...`);
+
   processUserQuery(prompt);
 }
 
@@ -684,12 +766,14 @@ function processUserQuery(query) {
     // 2. Spectral signature / Discrimination queries
     else if (lower.includes('signature') || lower.includes('pine') || lower.includes('oak') || lower.includes('distinguish') || lower.includes('how')) {
       switchPanelTab('analysis');
+      showLiveDetectionBanner('📊 Spectral signature curves loaded • Tap to view', true);
       appendBotMessage(`**Distinguishing Eucalyptus via Satellite Spectral Bands**:\n\n1. **High NIR Peak (B08)**: Dense eucalyptus foliage reflects up to 52% in NIR, higher than maritime pine (35%).\n2. **Red-Edge Steepness (B05, B06)**: Chlorophyll absorptions create a unique inflection point.\n3. **Pendulous Leaf Angle & Moisture (SWIR / B11, B12)**: Eucalyptus leaves hang vertically, giving distinct sun angle scattering and lower moisture stress compared to oak species.\n4. **Phenology**: Evergreen behavior provides contrast during European/North American winter when deciduous competitors drop leaves.`);
     }
     // 3. STAC / Sentinel scenes
     else if (lower.includes('stac') || lower.includes('scene') || lower.includes('sentinel') || lower.includes('landsat') || lower.includes('cloud')) {
       switchPanelTab('satellite');
       querySTACScenes();
+      showLiveDetectionBanner('🛰️ Sentinel-2 STAC scenes queried • Tap to view', true);
       appendBotMessage(`Querying the STAC catalog for the current coordinates. Opening the **STAC Satellite Feeds** tab with latest scenes.`);
     }
     // 4. Dynamic Geocoding / Location Scan (e.g., "find eucalyptus in [place]")
@@ -717,6 +801,13 @@ function processUserQuery(query) {
             document.getElementById('spectralMatchPct').innerText = `91%`;
             document.getElementById('spectralMatchBar').style.width = `91%`;
 
+            showLiveDetectionBanner(`✅ <strong>${name}</strong>: ~1,620 ha detected (91% match) • Tap for AI report`, true);
+            const badge = document.getElementById('floatingChatBadge');
+            if (badge) {
+              badge.innerText = 'New';
+              badge.className = 'text-[10px] bg-emerald-400 text-slate-950 font-bold px-1.5 py-0.2 rounded-full animate-bounce';
+            }
+
             appendBotMessage(`**Located & Analyzed**: **${name}**\n\n- Coordinates: \`${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E\`\n- **Sentinel-2 Multi-Spectral Analysis**: Computed NDVI (0.71) and NDRE Red-Edge inflection.\n- **Eucalyptus Biomass**: Identified candidate Eucalyptus stands matching NIR reflectance signature.\n- **Canopy Estimate**: ~1,620 hectares in current tile bounding box.`);
             return;
           }
@@ -728,7 +819,18 @@ function processUserQuery(query) {
     }
     // Default intelligent GIS response
     else {
+      showLiveDetectionBanner('💬 GIS AI response ready • Tap to view report', true);
       appendBotMessage(`I've received your GIS query regarding: *"${query}"*.\n\nI can automatically navigate the map, run Sentinel-2 spectral classifications (NDVI, NDRE, MSI), or retrieve raw cloud-free STAC satellite granules. Try asking:\n- *"Scan this area for Eucalyptus"* \n- *"Fly to Eucalyptus plantations in Brazil"* \n- *"Show spectral curves"*`);
+    }
+
+    // Signal new message on the floating button badge if popup is minimized
+    const panel = document.getElementById('sidePanel');
+    if (panel && panel.classList.contains('hidden')) {
+      const badge = document.getElementById('floatingChatBadge');
+      if (badge) {
+        badge.innerText = 'New';
+        badge.className = 'text-[10px] bg-emerald-400 text-slate-950 font-bold px-1.5 py-0.2 rounded-full animate-bounce';
+      }
     }
   }, 800);
 }
@@ -802,11 +904,11 @@ function setupEventListeners() {
     if (map) map.invalidateSize();
   });
 
-  // On mobile screens (< 768px), initialize sidePanel as hidden to start with full map
+  // Start with clean unobstructed map and floating chat launcher
+  minimizeChatPopup();
+
+  // On mobile screens (< 768px), auto-collapse layers panel to keep map clean
   if (window.innerWidth < 768) {
-    const panel = document.getElementById('sidePanel');
-    if (panel) panel.classList.add('hidden');
-    // Also auto-collapse layers panel on small mobile screens to keep map clean
     const body = document.getElementById('layerControlsBody');
     const chevron = document.getElementById('layerPanelChevron');
     if (body) body.classList.add('hidden');
@@ -814,9 +916,6 @@ function setupEventListeners() {
       chevron.classList.remove('ph-caret-up');
       chevron.classList.add('ph-caret-down');
     }
-    updateMobileNavState('map');
-  } else {
-    const panel = document.getElementById('sidePanel');
-    if (panel) panel.classList.remove('hidden');
   }
+  updateMobileNavState('map');
 }

@@ -144,18 +144,17 @@
         <span class="text-slate-300 px-1 font-mono text-[11px] hidden sm:inline" id="stacEndpointLabel">STAC: Earth Search AWS</span>
         <span class="text-slate-300 px-0.5 font-mono text-[10px] sm:hidden">STAC</span>
       </div>
-      <button id="sidePanelToggleBtn" onclick="toggleSidePanel()" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 border border-slate-700" title="Toggle Sidebar">
-        <i class="ph-bold ph-sidebar-simple text-lg"></i>
+      <button id="sidePanelToggleBtn" onclick="toggleChatPopup()" class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 rounded-lg border border-emerald-500/40 text-xs font-medium transition shadow-sm" title="Toggle GIS AI Chat Popup">
+        <i class="ph-bold ph-chat-teardrop-text text-base"></i>
+        <span class="hidden sm:inline">AI Chat</span>
       </button>
     </div>
   </header>
 
   <!-- Main Content Layout -->
-  <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative w-full h-[calc(100dvh-3.5rem)]">
-
-    <!-- Left Interactive Map -->
-    <div class="flex-1 relative flex flex-col h-full w-full">
-      <div id="map"></div>
+  <div class="flex-1 relative w-full h-[calc(100dvh-3.5rem)] overflow-hidden">
+    <!-- Interactive Map (Full Screen) -->
+    <div id="map" class="w-full h-full"></div>
 
       <!-- Map Floating Overlay: Layer Controls & Spectral Toggles -->
       <div id="layerPanel" class="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 glassmorphism rounded-xl p-3 shadow-2xl w-[280px] sm:w-[310px] max-w-[calc(100vw-1.5rem)] text-xs transition-all duration-200">
@@ -257,33 +256,55 @@
       </div>
     </div>
 
-    <!-- Right Sidebar: Automated AI GIS Chat & Spectral Analysis Assistant -->
-    <div id="sidePanel" class="hidden md:flex fixed inset-0 md:relative md:inset-auto z-40 md:z-20 w-full md:w-[400px] lg:w-[440px] md:border-l border-slate-800 bg-slate-950/98 md:bg-slate-900/95 flex-col h-full shrink-0 shadow-2xl transition-all duration-300">
+    <!-- Live Detection Floating Status Banner -->
+    <div id="liveDetectionBanner" onclick="openChatPopup('chat')" class="hidden fixed top-16 left-1/2 -translate-x-1/2 z-30 glassmorphism rounded-full px-4 py-1.5 border border-emerald-500/50 shadow-2xl flex items-center gap-2.5 text-xs text-slate-200 transition-all duration-300 cursor-pointer hover:bg-slate-900 max-w-[92vw] truncate">
+      <span id="liveDetectionPulse" class="w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-dot shrink-0"></span>
+      <span id="liveDetectionBannerText" class="truncate font-medium text-emerald-300">Live Satellite Analysis Active</span>
+      <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30 shrink-0 flex items-center gap-1">
+        View Report <i class="ph-bold ph-caret-up"></i>
+      </span>
+    </div>
 
-      <!-- Mobile Drawer Header -->
-      <div class="flex md:hidden items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900 shrink-0">
-        <div class="flex items-center gap-2">
-          <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white">
-            <i class="ph-bold ph-satellite"></i>
-          </div>
-          <span class="font-bold text-sm text-emerald-400">ASAT-2 GIS Intelligence</span>
-        </div>
-        <button onclick="closeSidePanel()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium flex items-center gap-1.5">
-          <i class="ph-bold ph-x text-sm"></i> Back to Map
-        </button>
+    <!-- Floating Chat Launcher Button (visible when popup is closed/minimized) -->
+    <button id="floatingChatBtn" onclick="openChatPopup('chat')" class="fixed bottom-16 md:bottom-5 right-3 sm:right-5 z-30 flex items-center gap-2 px-3.5 py-2.5 rounded-full bg-slate-900/95 hover:bg-slate-800 text-emerald-400 font-medium shadow-2xl border border-emerald-500/50 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md">
+      <div class="relative flex items-center justify-center">
+        <i class="ph-bold ph-chat-teardrop-text text-lg text-emerald-400"></i>
+        <span class="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full pulse-dot"></span>
       </div>
-      
-      <!-- Panel Tabs -->
-      <div class="flex border-b border-slate-800 bg-slate-900 px-3 pt-2">
-        <button id="tabChatBtn" onclick="switchPanelTab('chat')" class="flex-1 py-2 px-3 text-xs font-semibold border-b-2 border-emerald-500 text-emerald-400 flex items-center justify-center gap-2">
-          <i class="ph-bold ph-chat-teardrop-text text-base"></i> GIS AI Assistant
-        </button>
-        <button id="tabAnalysisBtn" onclick="switchPanelTab('analysis')" class="flex-1 py-2 px-3 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-300 flex items-center justify-center gap-2">
-          <i class="ph-bold ph-chart-line-up text-base"></i> Spectral Signature
-        </button>
-        <button id="tabSatBtn" onclick="switchPanelTab('satellite')" class="flex-1 py-2 px-3 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-300 flex items-center justify-center gap-2">
-          <i class="ph-bold ph-planet text-base"></i> STAC Satellite Feeds
-        </button>
+      <span class="text-xs font-semibold text-slate-100">GIS AI Assistant</span>
+      <span id="floatingChatBadge" class="text-[10px] bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-medium px-1.5 py-0.2 rounded-full">Ask</span>
+    </button>
+
+    <!-- AI GIS Assistant Small Pop (Floating Window) -->
+    <div id="sidePanel" class="hidden fixed bottom-16 md:bottom-5 right-2 sm:right-5 z-40 w-[350px] sm:w-[420px] max-w-[calc(100vw-1rem)] h-[490px] max-h-[calc(100dvh-7.5rem)] glassmorphism rounded-2xl shadow-2xl border border-emerald-500/40 flex flex-col overflow-hidden transition-all duration-300">
+
+      <!-- Popup Header with Tabs & Controls -->
+      <div class="px-3.5 py-2 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 text-sm">
+            <i class="ph-bold ph-robot"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="font-bold text-xs text-slate-100">GIS AI Assistant</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
+            </div>
+            <div class="text-[9px] text-slate-400 font-mono">Sentinel-2 L2A</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-1">
+          <div class="flex bg-slate-950/80 rounded-lg p-0.5 border border-slate-800 text-[11px]">
+            <button id="tabChatBtn" onclick="switchPanelTab('chat')" class="px-2 py-0.5 rounded-md font-semibold text-emerald-400 bg-slate-800 transition">Chat</button>
+            <button id="tabAnalysisBtn" onclick="switchPanelTab('analysis')" class="px-2 py-0.5 rounded-md font-semibold text-slate-400 hover:text-slate-200 transition">Spectra</button>
+            <button id="tabSatBtn" onclick="switchPanelTab('satellite')" class="px-2 py-0.5 rounded-md font-semibold text-slate-400 hover:text-slate-200 transition">STAC</button>
+          </div>
+          <button onclick="minimizeChatPopup()" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition ml-0.5" title="Minimize to see live map">
+            <i class="ph-bold ph-caret-down text-base"></i>
+          </button>
+          <button onclick="closeChatPopup()" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition" title="Close popup">
+            <i class="ph-bold ph-x text-base"></i>
+          </button>
+        </div>
       </div>
 
       <!-- Tab Content: Chat Interface -->
@@ -315,27 +336,39 @@
         </div>
 
         <!-- Pre-suggested quick queries -->
-        <div class="px-4 py-2 bg-slate-950/60 border-t border-slate-800/80 flex gap-2 overflow-x-auto text-[11px] custom-scrollbar whitespace-nowrap">
-          <button onclick="sendQuickPrompt('Scan current map for Eucalyptus plantations')" class="px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 flex items-center gap-1">
-            <i class="ph-bold ph-magnifying-glass"></i> Scan map for Eucalyptus
+        <div class="px-3 py-1.5 bg-slate-950/70 border-t border-slate-800/60 flex gap-1.5 overflow-x-auto text-[10px] custom-scrollbar whitespace-nowrap shrink-0">
+          <button onclick="sendQuickPrompt('find eucalyptus in bangalore india')" class="px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-emerald-300 border border-slate-700/80 flex items-center gap-1">
+            🌱 Bangalore
           </button>
-          <button onclick="sendQuickPrompt('Explain the Eucalyptus spectral signature')" class="px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1">
-            <i class="ph-bold ph-waveform"></i> Spectral signature
+          <button onclick="sendQuickPrompt('Scan current map for Eucalyptus plantations')" class="px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/80 flex items-center gap-1">
+            <i class="ph-bold ph-radar"></i> Scan Viewport
           </button>
-          <button onclick="sendQuickPrompt('Fetch latest Sentinel-2 scenes for this bbox')" class="px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1">
-            <i class="ph-bold ph-satellite"></i> Fetch STAC scenes
+          <button onclick="sendQuickPrompt('find eucalyptus in portugal')" class="px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/80 flex items-center gap-1">
+            🌲 Portugal
+          </button>
+          <button onclick="sendQuickPrompt('find eucalyptus in brazil')" class="px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/80 flex items-center gap-1">
+            🌳 Brazil
+          </button>
+          <button onclick="sendQuickPrompt('Explain the Eucalyptus spectral signature')" class="px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/80 flex items-center gap-1">
+            <i class="ph-bold ph-waveform"></i> Spectral
           </button>
         </div>
 
         <!-- Chat Input Form -->
-        <div class="p-3 bg-slate-900 border-t border-slate-800 safe-bottom">
+        <div class="p-2.5 bg-slate-900/95 border-t border-slate-800 shrink-0 safe-bottom">
           <form id="chatForm" onsubmit="handleChatSubmit(event)" class="flex items-center gap-2">
-            <input type="text" id="chatInput" placeholder="Ask AI to scan, locate, or analyze satellite GIS data..."
-                   class="flex-1 bg-slate-950 text-slate-200 text-base sm:text-xs px-3 py-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-emerald-500 transition placeholder-slate-500">
-            <button type="submit" class="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition shadow-lg shadow-emerald-700/30 flex items-center justify-center shrink-0">
-              <i class="ph-bold ph-paper-plane-right text-base"></i>
+            <input type="text" id="chatInput" placeholder="Ask AI (e.g. find eucalyptus in Bangalore)..."
+                   class="flex-1 bg-slate-950 text-slate-200 text-xs px-3 py-2 rounded-xl border border-slate-700/80 focus:outline-none focus:border-emerald-500 transition placeholder-slate-500">
+            <button type="submit" class="p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition shadow-md shadow-emerald-700/30 flex items-center justify-center shrink-0" title="Send & Auto-Minimize">
+              <i class="ph-bold ph-paper-plane-right text-sm"></i>
             </button>
           </form>
+          <div class="flex items-center justify-between text-[10px] text-slate-400 pt-1 px-1">
+            <span class="text-emerald-400/90 flex items-center gap-1 font-medium">
+              <i class="ph-bold ph-lightning"></i> Auto-minimizes on send for live map view
+            </span>
+            <span class="text-slate-500">Enter ↵</span>
+          </div>
         </div>
       </div>
 
