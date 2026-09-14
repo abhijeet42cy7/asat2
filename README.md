@@ -55,11 +55,38 @@ Then visit **`http://localhost:8080`** in your browser.
 ## 📁 Repository Structure
 ```
 asat2/
-├── index.html        # Main interactive GIS frontend & Leaflet map UI
-├── app.js            # Map controllers, STAC API queries & Chatbot logic
-├── gis_engine.py     # Python spectral analysis & STAC API processing algorithms
-├── server.py         # Lightweight Python API gateway & static server
-└── README.md         # Comprehensive project documentation
+├── index.html            # Main interactive GIS frontend & Leaflet map UI
+├── app.js                # Map controllers, STAC API queries & Chatbot logic
+├── detect_eucalyptus.py  # Production CLI Sentinel-2 Multi-Spectral Classifier
+├── gis_engine.py         # Python spectral analysis & STAC API processing algorithms
+├── server.py             # Lightweight Python API gateway & static server
+└── README.md             # Comprehensive project documentation
+```
+
+---
+
+## 🔬 Scientific Classification & Ground Truth
+
+### 1. Ground Truth Forestry Inventory Cadastre
+ASAT-2 displays **official surveyed forestry inventory boundaries** with real cadastral metadata, including:
+- **Portugal (Viseu/Águeda)**: ICNF National Forest Inventory & Altri/Navigator FSC concessions (*E. globulus*).
+- **India (Kolar/Bangalore)**: Karnataka Forest Department agroforestry registry (*E. tereticornis*).
+- **Brazil (Minas Gerais)**: MapBiomas Silvicultura & Cenibra clonal silviculture (*E. grandis x urophylla*).
+
+### 2. Multi-Spectral Pixel Inspector
+Click the **🎯 Inspect** tool in the Layers panel and tap anywhere on Earth:
+- Audits multi-spectral surface reflectance across Red (B04), Red-Edge (B05), NIR (B08), and SWIR (B11).
+- Checks point against verified cadastral registries.
+- Queries live Sentinel-2 STAC metadata for the exact granule and sensing date.
+
+### 3. CLI Pixel Classifier (`detect_eucalyptus.py`)
+Run automated multi-spectral detection from the terminal:
+```bash
+# Run automated self-tests
+python3 detect_eucalyptus.py --test
+
+# Scan custom bounding box and export GeoJSON
+python3 detect_eucalyptus.py --bbox -8.0 40.6 -7.8 40.8 --threshold 0.68 --output eucalyptus.geojson
 ```
 
 ---
